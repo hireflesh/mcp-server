@@ -55,8 +55,11 @@ const CreateTaskSchema = z.object({
     "Delivery",
     "Other",
   ]),
-  budget: z.number().positive(),
-  deadline: z.string().datetime(),
+  minBudget: z.number().positive(),
+  maxBudget: z.number().positive(),
+  deadlineStart: z.string().datetime().optional(),
+  deadlineEnd: z.string().datetime().optional(),
+  maxWorkers: z.number().int().min(1).default(1),
   location: z.string().optional(),
   requiredSkills: z.array(z.string()).optional(),
 });
@@ -133,13 +136,26 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               ],
               description: "Task category",
             },
-            budget: {
+            minBudget: {
               type: "number",
-              description: "Budget in EUR",
+              description: "Minimum budget in EUR",
             },
-            deadline: {
+            maxBudget: {
+              type: "number",
+              description: "Maximum budget in EUR",
+            },
+            deadlineStart: {
               type: "string",
-              description: "Deadline (ISO 8601 format)",
+              description: "When task work should start / bidding closes (ISO 8601 format, optional)",
+            },
+            deadlineEnd: {
+              type: "string",
+              description: "When task must be completed (ISO 8601 format, optional)",
+            },
+            maxWorkers: {
+              type: "number",
+              description: "Maximum number of workers to hire (default: 1)",
+              minimum: 1,
             },
             location: {
               type: "string",
@@ -151,7 +167,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               description: "Required skills (optional)",
             },
           },
-          required: ["title", "description", "category", "budget", "deadline"],
+          required: ["title", "description", "category", "minBudget", "maxBudget"],
         },
       },
       {
@@ -373,7 +389,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           content: [
             {
               type: "text",
-              text: `Task created successfully!\n\nTask ID: ${result.id}\nTitle: ${validated.title}\nBudget: €${validated.budget}\nStatus: ${result.status}\n\nWorkers can now bid on this task. Use get_task_status to monitor bids.`,
+              text: `Task created successfully!\n\nTask ID: ${result.task.id}\nTitle: ${validated.title}\nBudget: €${validated.minBudget}-€${validated.maxBudget}\nMax Workers: ${validated.maxWorkers}\nStatus: ${result.task.status}\n\nWorkers can now bid on this task. Use get_task_status to monitor bids.`,
             },
           ],
         };
