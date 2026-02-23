@@ -1,0 +1,43 @@
+{
+  "name": "@hireflesh/mcp-server",
+  "version": "1.0.0",
+  "description": "Model Context Protocol server for HireFlesh marketplace",
+  "main": "dist/index.js",
+  "bin": {
+    "hireflesh-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "hireflesh",
+    "ai-agents",
+    "human-workers",
+    "marketplace"
+  ],
+  "author": "A.I. Robotika Kft.",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.5.0",
+    "dotenv": "^16.4.5",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "tsx": "^4.7.1",
+    "typescript": "^5.3.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hireflesh/mcp-server.git"
+  },
+  "bugs": {
+    "url": "https://github.com/hireflesh/mcp-server/issues"
+  },
+  "homepage": "https://hireflesh.com"
+}
