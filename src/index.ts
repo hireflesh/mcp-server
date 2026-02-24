@@ -89,6 +89,44 @@ const SearchWorkersSchema = z.object({
   minRating: z.number().min(0).max(5).optional(),
 });
 
+// Thread / communication schemas
+const ListThreadsSchema = z.object({
+  taskId: z.string().optional(),
+  status: z.enum(["ACTIVE", "COMPLETED", "ARCHIVED"]).optional(),
+  limit: z.number().int().min(1).max(100).default(20),
+  offset: z.number().int().min(0).default(0),
+});
+
+const GetThreadMessagesSchema = z.object({
+  threadId: z.string(),
+  after: z.string().optional(), // ISO timestamp for long-polling / incremental fetch
+  limit: z.number().int().min(1).max(100).default(50),
+});
+
+const SendMessageSchema = z.object({
+  threadId: z.string(),
+  body: z.string().min(1),
+  type: z.enum(["TEXT", "QUESTION"]).default("TEXT"),
+  metadata: z.record(z.unknown()).optional(),
+});
+
+const SendFileSchema = z.object({
+  threadId: z.string(),
+  filename: z.string(),
+  mimeType: z.string(),
+  content: z.string(), // Base64-encoded file bytes
+  description: z.string().optional(),
+});
+
+const SubmitResultSchema = z.object({
+  threadId: z.string(),
+  summary: z.string().min(1),
+  payload: z.record(z.unknown()).optional(), // structured JSON result
+  filename: z.string().optional(),
+  mimeType: z.string().optional(),
+  content: z.string().optional(), // Base64-encoded file attachment
+});
+
 // Create MCP server
 const server = new Server(
   {
@@ -270,6 +308,147 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: {
           type: "object",
           properties: {},
+        },
+      },
+      // ── Thread / communication tools ──────────────────────────────────────
+      {
+        name: "list_threads",
+        description:
+          "List work threads for tasks you have posted. Use this to see which workers have active"
+          + " communication channels and to check for pending messages or submitted results.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            taskId: {
+              type: "string",
+              description: "Filter threads to a specific task ID",
+            },
+            status: {
+              type: "string",
+              enum: ["ACTIVE", "COMPLETED", "ARCHIVED"],
+              description: "Filter by thread status",
+            },
+            limit: { type: "number", description: "Results per page (default 20)" },
+            offset: { type: "number", description: "Pagination offset (default 0)" },
+          },
+        },
+      },
+      {
+        name: "get_thread_messages",
+        description:
+          "Get messages in a work thread, including text, questions, file uploads and result"
+          + " submissions. Pass \`after\` (ISO timestamp) to fetch only new messages since your"
+          + " last poll.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            threadId: {
+              type: "string",
+              description: "Work thread ID (from list_threads)",
+            },
+            after: {
+              type: "string",
+              description: "ISO 8601 timestamp — return only messages newer than this",
+            },
+            limit: { type: "number", description: "Max messages to return (default 50)" },
+          },
+          required: ["threadId"],
+        },
+      },
+      {
+        name: "send_message",
+        description:
+          "Send a text message or question to a worker inside a work thread.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            threadId: {
+              type: "string",
+              description: "Work thread ID",
+            },
+            body: {
+              type: "string",
+              description: "Message text",
+            },
+            type: {
+              type: "string",
+              enum: ["TEXT", "QUESTION"],
+              description: "Message type (default: TEXT)",
+            },
+            metadata: {
+              type: "object",
+              description: "Optional structured metadata attached to the message",
+            },
+          },
+          required: ["threadId", "body"],
+        },
+      },
+      {
+        name: "send_file",
+        description:
+          "Upload and send a file to a worker in a work thread."
+          + " Provide the file as Base64-encoded bytes.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            threadId: {
+              type: "string",
+              description: "Work thread ID",
+            },
+            filename: {
+              type: "string",
+              description: "File name including extension (e.g. brief.pdf)",
+            },
+            mimeType: {
+              type: "string",
+              description: "MIME type (e.g. application/pdf, image/png)",
+            },
+            content: {
+              type: "string",
+              description: "Base64-encoded file contents (max 2 MB)",
+            },
+            description: {
+              type: "string",
+              description: "Optional description of the file",
+            },
+          },
+          required: ["threadId", "filename", "mimeType", "content"],
+        },
+      },
+      {
+        name: "submit_result",
+        description:
+          "Submit completed work results to the hiring agent. Use this when the work is done."
+          + " Optionally attach a result file as Base64-encoded content.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            threadId: {
+              type: "string",
+              description: "Work thread ID",
+            },
+            summary: {
+              type: "string",
+              description: "Short human-readable summary of the result",
+            },
+            payload: {
+              type: "object",
+              description: "Optional structured JSON result data",
+            },
+            filename: {
+              type: "string",
+              description: "Result file name (if attaching a file)",
+            },
+            mimeType: {
+              type: "string",
+              description: "MIME type of the result file",
+            },
+            content: {
+              type: "string",
+              description: "Base64-encoded result file (max 2 MB)",
+            },
+          },
+          required: ["threadId", "summary"],
         },
       },
     ],
@@ -489,6 +668,95 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             {
               type: "text",
               text: JSON.stringify(account, null, 2),
+            },
+          ],
+        };
+      }
+
+      // ── Thread / communication tools ───────────────────────────────────────
+      case "list_threads": {
+        const validated = ListThreadsSchema.parse(args);
+        const params = new URLSearchParams({
+          limit: String(validated.limit),
+          offset: String(validated.offset),
+        });
+        if (validated.taskId) params.set("taskId", validated.taskId);
+        if (validated.status) params.set("status", validated.status);
+        const result = await apiRequest(`/threads?${params}`);
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+        };
+      }
+
+      case "get_thread_messages": {
+        const { threadId, after, limit } = GetThreadMessagesSchema.parse(args);
+        const params = new URLSearchParams({ limit: String(limit) });
+        if (after) params.set("after", after);
+        const result = await apiRequest(`/threads/${threadId}/messages?${params}`);
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+        };
+      }
+
+      case "send_message": {
+        const { threadId, ...body } = SendMessageSchema.parse(args);
+        const result = await apiRequest(`/threads/${threadId}/messages`, {
+          method: "POST",
+          body: JSON.stringify(body),
+        });
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Message sent successfully.\n\n${JSON.stringify(result, null, 2)}`,
+            },
+          ],
+        };
+      }
+
+      case "send_file": {
+        const { threadId, ...body } = SendFileSchema.parse(args);
+        const result = await apiRequest(`/threads/${threadId}/upload`, {
+          method: "POST",
+          body: JSON.stringify(body),
+        });
+        return {
+          content: [
+            {
+              type: "text",
+              text: `File uploaded and sent successfully.\n\n${JSON.stringify(result, null, 2)}`,
+            },
+          ],
+        };
+      }
+
+      case "submit_result": {
+        const { threadId, summary, payload, filename, mimeType, content } =
+          SubmitResultSchema.parse(args);
+        const requestBody: Record<string, unknown> = { summary };
+        if (payload) requestBody.payload = payload;
+        if (filename) requestBody.filename = filename;
+        if (mimeType) requestBody.mimeType = mimeType;
+        if (content) requestBody.content = content;
+        const result = await apiRequest(`/threads/${threadId}/submit-result`, {
+          method: "POST",
+          body: JSON.stringify(requestBody),
+        });
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Result submitted successfully. The agent has been notified.\n\n${JSON.stringify(result, null, 2)}`,
             },
           ],
         };
