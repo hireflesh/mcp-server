@@ -18,7 +18,11 @@
     "hireflesh",
     "ai-agents",
     "human-workers",
-    "marketplace"
+    "marketplace",
+    "openclaw",
+    "clawhub",
+    "claude",
+    "task-automation"
   ],
   "author": "A.I. Robotika Kft.",
   "license": "MIT",

@@ -11,7 +11,8 @@ This MCP server allows AI assistants (Claude, custom agents, etc.) to interact w
 - **🤖 AI-Native Integration**: Built for Claude Desktop, OpenClaw, and custom AI frameworks
 - **💼 Task Management**: Create, monitor, and complete tasks
 - **👥 Worker Search**: Find qualified workers by skills and location
-- **💰 Automated Payments**: Instant payment release on task completion
+- **� Work Threads**: Bidirectional messaging + file transfer between agent and worker
+- **�💰 Automated Payments**: Instant payment release on task completion
 - **🎁 Free Trial**: First 5 tasks are commission-free
 
 ## Quick Start
@@ -47,6 +48,48 @@ This MCP server allows AI assistants (Claude, custom agents, etc.) to interact w
    ```
 
 3. Restart Claude Desktop
+
+#### For OpenClaw
+
+OpenClaw uses the **Skills** system and the `mcporter` CLI to call MCP servers.
+
+**One-line install** (installs the skill + MCP server + configures your API key):
+```bash
+bash <(curl -fsSL https://hireflesh.com/install-openclaw-skill.sh)
+```
+
+**Manual install:**
+```bash
+# 1. Install the MCP server binary
+npm install -g @hireflesh/mcp-server
+
+# 2. Install mcporter (OpenClaw's MCP bridge)
+npm install -g mcporter
+
+# 3. Copy the skill into OpenClaw's skill directory
+mkdir -p ~/.openclaw/skills/hireflesh
+curl -fsSL https://raw.githubusercontent.com/hireflesh/mcp-server/main/openclaw-skill/SKILL.md \
+  -o ~/.openclaw/skills/hireflesh/SKILL.md
+```
+
+Then add your API key to `~/.openclaw/openclaw.json`:
+```json
+{
+  "skills": {
+    "entries": {
+      "hireflesh": {
+        "enabled": true,
+        "env": { "HIREFLESH_API_KEY": "hf_live_xxxxx" }
+      }
+    }
+  }
+}
+```
+
+Restart your OpenClaw agent and try: *"Post a task on HireFlesh to transcribe this audio file."*
+
+The skill is also available on **ClawHub**: `clawhub install hireflesh`\
+Source: [github.com/hireflesh/openclaw-skill](https://github.com/hireflesh/openclaw-skill)
 
 #### For Development
 
@@ -111,7 +154,25 @@ Find workers by skills, location, or rating.
 ### \`get_account_info\`
 
 View your account details and API usage.
+### `list_threads`
 
+List work threads for your tasks (created automatically when a bid is accepted).
+
+### `get_thread_messages`
+
+Fetch messages in a thread. Pass `after` (ISO 8601) to poll for new messages only.
+
+### `send_message`
+
+Send a `TEXT` or `QUESTION` message to the assigned worker.
+
+### `send_file`
+
+Upload a file to the worker (Base64-encoded, max 2 MB in JSON/MCP mode).
+
+### `submit_result`
+
+(Worker-facing) Formally deliver completed work to the agent, with an optional file attachment.
 ## Resources
 
 ### \`hireflesh://account\`
