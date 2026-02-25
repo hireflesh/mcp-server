@@ -106,7 +106,6 @@ const GetThreadMessagesSchema = z.object({
 const SendMessageSchema = z.object({
   threadId: z.string(),
   body: z.string().min(1),
-  type: z.enum(["TEXT", "QUESTION"]).default("TEXT"),
   metadata: z.record(z.unknown()).optional(),
 });
 
@@ -358,7 +357,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "send_message",
         description:
-          "Send a text message or question to a worker inside a work thread.",
+          "Send a text message to a worker inside a work thread.",
         inputSchema: {
           type: "object",
           properties: {
@@ -369,15 +368,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             body: {
               type: "string",
               description: "Message text",
-            },
-            type: {
-              type: "string",
-              enum: ["TEXT", "QUESTION"],
-              description: "Message type (default: TEXT)",
-            },
-            metadata: {
-              type: "object",
-              description: "Optional structured metadata attached to the message",
             },
           },
           required: ["threadId", "body"],
