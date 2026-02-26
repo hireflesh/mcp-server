@@ -22,13 +22,16 @@ if (!API_KEY) {
 }
 
 // API client helper
-async function apiRequest(endpoint: string, options: RequestInit = {}) {
+async function apiRequest(
+  endpoint: string,
+  options: RequestInit = {},
+): Promise<any> {
   const url = `${BASE_URL}/api/v1${endpoint}`;
   const response = await fetch(url, {
     ...options,
     headers: {
       "Content-Type": "application/json",
-      "X-API-Key": API_KEY,
+      "X-API-Key": API_KEY as string,
       ...options.headers,
     },
   });

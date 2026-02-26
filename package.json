@@ -1,6 +1,7 @@
 {
   "name": "@hireflesh/mcp-server",
   "version": "1.0.0",
+  "type": "module",
   "description": "Model Context Protocol server for HireFlesh marketplace",
   "main": "dist/index.js",
   "bin": {
