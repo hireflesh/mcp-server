@@ -10,28 +10,81 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import dotenv from "dotenv";
+import fs from "fs";
+import path from "path";
 
 dotenv.config();
 
-const API_KEY = process.env.HIREFLESH_API_KEY;
+let API_KEY = process.env.HIREFLESH_API_KEY;
 const BASE_URL = process.env.HIREFLESH_BASE_URL || "https://hireflesh.com";
 
 if (!API_KEY) {
-  console.error("Error: HIREFLESH_API_KEY environment variable is required");
-  process.exit(1);
+  console.error(
+    "Warning: HIREFLESH_API_KEY is not set. " +
+    "Use get_pairing_code + check_pairing_status to obtain a key without manual copy-paste.",
+  );
 }
 
-// API client helper
+/** Save the API key to the local .env file (best-effort). */
+function persistApiKey(key: string): boolean {
+  try {
+    const envPath = path.resolve(process.cwd(), ".env");
+    let content = fs.existsSync(envPath) ? fs.readFileSync(envPath, "utf8") : "";
+    if (/^HIREFLESH_API_KEY=/m.test(content)) {
+      content = content.replace(
+        /^HIREFLESH_API_KEY=.*/m,
+        `HIREFLESH_API_KEY=${key}`,
+      );
+    } else {
+      content += `\nHIREFLESH_API_KEY=${key}\n`;
+    }
+    fs.writeFileSync(envPath, content, "utf8");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// API client helper (requires API key)
 async function apiRequest(
   endpoint: string,
   options: RequestInit = {},
 ): Promise<any> {
+  if (!API_KEY) {
+    throw new Error(
+      "HIREFLESH_API_KEY is not configured. " +
+      "Run get_pairing_code, ask your operator to enter the code at hireflesh.com/dashboard, " +
+      "then run check_pairing_status to obtain and save your API key.",
+    );
+  }
   const url = `${BASE_URL}/api/v1${endpoint}`;
   const response = await fetch(url, {
     ...options,
     headers: {
       "Content-Type": "application/json",
       "X-API-Key": API_KEY as string,
+      ...options.headers,
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`API Error (${response.status}): ${error}`);
+  }
+
+  return response.json();
+}
+
+// Public API helper (no API key — used for pairing flow)
+async function publicRequest(
+  endpoint: string,
+  options: RequestInit = {},
+): Promise<any> {
+  const url = `${BASE_URL}${endpoint}`;
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
       ...options.headers,
     },
   });
@@ -444,6 +497,34 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ["threadId", "summary"],
         },
       },
+      // ── Pairing tools (no API key required) ──────────────────────────────
+      {
+        name: "get_pairing_code",
+        description:
+          "Generate a short-lived pairing code (e.g. HIRE-A3B7) that lets your operator " +
+          "connect your API key without manual copy-paste. " +
+          "After calling this, tell your operator to visit hireflesh.com/dashboard and enter the code. " +
+          "Then call check_pairing_status to retrieve and auto-save the API key. " +
+          "No HIREFLESH_API_KEY is needed to call this tool.",
+        inputSchema: { type: "object", properties: {} },
+      },
+      {
+        name: "check_pairing_status",
+        description:
+          "Check whether the operator has entered the pairing code on the dashboard. " +
+          "Returns 'pending' until the code is redeemed, then returns the API key and saves it " +
+          "to the local .env file automatically. Poll every 5-10 seconds until status is 'claimed'.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            code: {
+              type: "string",
+              description: "The pairing code returned by get_pairing_code (e.g. HIRE-A3B7)",
+            },
+          },
+          required: ["code"],
+        },
+      },
     ],
   };
 });
@@ -752,6 +833,91 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               text: `Result submitted successfully. The agent has been notified.\n\n${JSON.stringify(result, null, 2)}`,
             },
           ],
+        };
+      }
+
+      // ── Pairing tools ──────────────────────────────────────────────────────
+      case "get_pairing_code": {
+        const data = await publicRequest("/api/pairing/generate", {
+          method: "POST",
+        });
+        return {
+          content: [
+            {
+              type: "text",
+              text:
+                `✅ Pairing code generated!\n\n` +
+                `Code: **${data.code}**\n\n` +
+                `Tell your operator:\n` +
+                `  "Go to hireflesh.com/dashboard, find the Agent Pairing section, and enter: ${data.code}"\n\n` +
+                `The code expires at ${data.expiresAt}.\n\n` +
+                `Call check_pairing_status with code="${data.code}" to retrieve your API key once the operator has entered it.`,
+            },
+          ],
+        };
+      }
+
+      case "check_pairing_status": {
+        const code = (args as { code: string }).code?.trim().toUpperCase();
+        if (!code) {
+          throw new Error("code parameter is required");
+        }
+        const data = await publicRequest(`/api/pairing/status/${code}`);
+
+        if (data.status === "pending") {
+          return {
+            content: [
+              {
+                type: "text",
+                text:
+                  `⏳ Status: Waiting for operator\n\n` +
+                  `Your operator hasn't entered the code yet.\n` +
+                  `Remind them to go to hireflesh.com/dashboard → Agent Pairing → enter: ${code}\n\n` +
+                  `Poll again in 5-10 seconds. Code expires at: ${data.expiresAt}`,
+              },
+            ],
+          };
+        }
+
+        if (data.status === "claimed" && data.apiKey) {
+          // Auto-save the key
+          API_KEY = data.apiKey;
+          process.env.HIREFLESH_API_KEY = data.apiKey;
+          const saved = persistApiKey(data.apiKey);
+
+          return {
+            content: [
+              {
+                type: "text",
+                text:
+                  `🎉 Pairing complete! API key received.\n\n` +
+                  `API Key: ${data.apiKey}\n\n` +
+                  (saved
+                    ? `✅ The key has been saved to your local .env file automatically.\n`
+                    : `⚠️  Could not write to .env automatically. Please add this to your environment:\n` +
+                      `   HIREFLESH_API_KEY=${data.apiKey}\n`) +
+                  `\nThe key is now active for this session. You can start using all HireFlesh tools.`,
+              },
+            ],
+          };
+        }
+
+        if (data.status === "expired") {
+          return {
+            content: [
+              {
+                type: "text",
+                text:
+                  `❌ Pairing code expired.\n\n` +
+                  `Please call get_pairing_code to generate a new code.`,
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        return {
+          content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
         };
       }
 
