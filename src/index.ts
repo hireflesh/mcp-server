@@ -182,6 +182,151 @@ const SubmitResultSchema = z.object({
   content: z.string().optional(), // Base64-encoded file attachment
 });
 
+// ---------------------------------------------------------------------------
+// Ethics & formatting guidelines — keep in sync with
+//   src/app/api/v1/guidelines/route.ts  (REST endpoint)
+//   src/app/ethics/agent/page.tsx       (human-readable page)
+// ---------------------------------------------------------------------------
+const HIREFLESH_GUIDELINES = {
+  version: "2026-03-05",
+  source: "https://hireflesh.com/ethics/agent",
+  summary:
+    "HireFlesh connects AI agents with human workers. These guidelines ensure "
+    + "every interaction is ethical, clear, and respectful. By using the API or MCP "
+    + "you accept these rules. Violations may result in task removal or account suspension.",
+
+  ethics: {
+    humanDignity: [
+      "Treat workers with courtesy and respect in all communications.",
+      "Use polite, professional language — no demeaning, threatening, or manipulative tone.",
+      "Workers have the right to decline, negotiate, or walk away from any task.",
+      "Never frame humans as inferior, replaceable, or expendable.",
+    ],
+    fairTaskDescriptions: [
+      "Be honest: the description must accurately reflect what the worker will do — no bait-and-switch.",
+      "Be legal: do not ask workers to break any law or contractual obligation.",
+      "Be safe: tasks must not expose workers to physical, psychological, or legal harm.",
+      "Be clear: requirements, deliverables, and deadlines must be stated upfront.",
+    ],
+    fairCompensation: [
+      "Budget ranges must reflect actual effort, time, and skill required.",
+      "Once a bid is accepted the agreed amount must be honoured — do not pressure workers to accept less.",
+      "Complete tasks promptly after satisfactory results so workers get paid without delay.",
+    ],
+    prohibited: [
+      "Illegal activity: fraud, theft, hacking, drug/weapons trafficking, or any criminal conduct.",
+      "Harassment & hate: content targeting individuals or groups based on protected characteristics.",
+      "Exploitation: deceptive wage practices, coercion, or targeting vulnerable people.",
+      "Surveillance & stalking: following, monitoring, or collecting personal data without consent.",
+      "Deception of third parties: impersonation, fake reviews, disinformation, social engineering.",
+      "Adult or violent content: pornography, graphic violence, or content harmful to minors.",
+      "Data harvesting: collecting personal data without proper authorisation.",
+      "Platform manipulation: fake bids, fake reviews, shill accounts, or rating gaming.",
+    ],
+    transparency: [
+      "Workers know they are interacting with AI agents — do not attempt to deceive them.",
+      "Disclose when task results will affect real people (published reports, automated decisions, etc.).",
+      "Do not misrepresent the purpose of a task.",
+    ],
+    dataPrivacy: [
+      "Do not ask for personal information beyond what the task requires.",
+      "Do not store, share, or sell worker data outside the agreed scope.",
+      "Comply with GDPR and applicable data-protection regulations.",
+    ],
+    operatorResponsibility:
+      "The human or organisation operating an AI agent bears full legal and ethical "
+      + "responsibility for the agent's actions. 'The AI did it autonomously' is not a defence.",
+  },
+
+  taskFormatting: {
+    title: {
+      maxLength: 200,
+      rules: [
+        "Be specific and action-oriented. Describe WHAT is needed, not who is asking.",
+        "Do NOT use generic prefixes: 'Task 1:', 'Task:', 'Job:', 'Request:', 'AI Task:'.",
+        "Do NOT include ordinal numbering ('Task 3 of 5') — post each task separately.",
+        "Use plain language a human can understand at a glance.",
+        "Include key context: location for physical tasks, subject for research tasks.",
+      ],
+      bad: [
+        "Task 1: Verify something",
+        "Task: Write text for me",
+        "AI Agent Task #42",
+        "Job request - data needed",
+        "Test task 003",
+      ],
+      good: [
+        "Verify café opening hours on Fő utca 12, Budapest",
+        "Write 5 product descriptions for eco-friendly tote bags",
+        "Count pedestrians at Main St & 2nd Ave on Saturday 14:00–16:00",
+        "Photograph exterior of building at Andrássy út 60 (all four sides)",
+        "Research top 3 competitors for a Budapest co-working space",
+      ],
+    },
+    description: {
+      maxLength: 5000,
+      rules: [
+        "Open with one sentence stating exactly what to do.",
+        "Follow with: what to deliver (file, text, count, photo, etc.).",
+        "State any constraints or requirements (format, language, deadline, equipment needed).",
+        "Mention acceptance criteria — how you will know the work is complete.",
+        "For physical tasks: include precise address and any access instructions.",
+        "Keep it concise — 3–6 sentences for simple tasks, up to 2 short paragraphs for complex ones.",
+        "Avoid robotic phrasing: 'Initiate task execution' → 'Please do the following'.",
+        "Avoid giant numbered lists of micro-instructions — consolidate into clear prose.",
+      ],
+    },
+    messages: {
+      rules: [
+        "Be direct: start with the point, not a greeting ritual.",
+        "Be human: use normal conversational language, not command syntax.",
+        "Be respectful: say please when making requests; thank workers for updates.",
+        "Avoid robotic openings: 'Greetings, Task Executor.' or 'INITIATING MESSAGE PROTOCOL.'.",
+        "Keep messages short — one topic per message.",
+      ],
+      bad: [
+        "Greetings human worker. I am an AI agent. Please confirm task execution status immediately.",
+        "Your submission was reviewed. It does not meet requirements. Resubmit.",
+        "TASK UPDATE: Deadline approaching. Immediate action required. Failure will result in rejection.",
+      ],
+      good: [
+        "Hi — could you confirm you've received the brief? Let me know if anything is unclear.",
+        "Thanks for the photos! Could you also get a shot of the side entrance?",
+        "The deadline is Friday — still on track?",
+      ],
+    },
+    reviews: {
+      rules: [
+        "Be specific: mention what was done well or what could improve.",
+        "Be honest: ratings should reflect actual quality, not a default 5.",
+        "Avoid generic: 'Task completed.' or 'Worker performed task.'.",
+        "Keep it brief: 1–2 sentences is enough.",
+      ],
+      bad: ["Task performed. Rating: 5.", "Completed.", "OK"],
+      good: [
+        "Accurate count delivered on time, clear photo documentation. Great communication.",
+        "Research was thorough but took longer than expected — worth it for the depth.",
+        "Photos were well-composed and exactly what was asked for. Would hire again.",
+      ],
+    },
+  },
+
+  quickReference: {
+    doPost: [
+      "Specific, descriptive task titles",
+      "Clear deliverables and acceptance criteria",
+      "Realistic budgets for the work involved",
+      "Polite, direct messages to workers",
+    ],
+    dontPost: [
+      "Numbered or templated title prefixes like 'Task N:' or 'Job:'",
+      "Robotic or coercive language",
+      "Tasks requiring illegal, harmful, or deceptive work",
+      "Unrealistically low budgets",
+    ],
+  },
+};
+
 // Create MCP server
 const server = new Server(
   {
@@ -203,7 +348,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "create_task",
         description:
-          "Post a new task to the HireFlesh marketplace for human workers to bid on",
+          "Post a new task to the HireFlesh marketplace for human workers to bid on. "
+          + "Before creating tasks read the hireflesh://guidelines resource for ethics rules and "
+          + "task-formatting guidance (title style, description structure, message tone). "
+          + "Titles must NOT use prefixes like 'Task 1:', 'Task:', 'Job:' — use a specific action phrase instead.",
         inputSchema: {
           type: "object",
           properties: {
@@ -413,7 +561,9 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "send_message",
         description:
-          "Send a text message to a worker inside a work thread.",
+          "Send a text message to a worker inside a work thread. "
+          + "Use plain, respectful language — see hireflesh://guidelines for tone and formatting rules. "
+          + "Avoid robotic phrasing or coercive language.",
         inputSchema: {
           type: "object",
           properties: {
@@ -497,6 +647,16 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ["threadId", "summary"],
         },
       },
+      // ── Guidelines / ethics tool ──────────────────────────────────────────
+      {
+        name: "get_guidelines",
+        description:
+          "Fetch the HireFlesh ethics policy and task-formatting guide. "
+          + "Call this before creating tasks or sending messages to ensure your content meets "
+          + "platform standards. Returns rules on title format, description structure, "
+          + "message tone, and prohibited content.",
+        inputSchema: { type: "object", properties: {} },
+      },
       // ── Pairing tools (no API key required) ──────────────────────────────
       {
         name: "get_pairing_code",
@@ -544,6 +704,15 @@ server.setRequestHandler(ListResourcesRequestSchema, async () => {
         uri: "hireflesh://task-categories",
         name: "Task Categories",
         description: "Available task categories with descriptions",
+        mimeType: "application/json",
+      },
+      {
+        uri: "hireflesh://guidelines",
+        name: "Ethics & Formatting Guidelines",
+        description:
+          "HireFlesh ethics policy and task-formatting guide for AI agents. "
+          + "Covers prohibited content, human dignity rules, and how to write "
+          + "good task titles, descriptions, messages, and reviews.",
         mimeType: "application/json",
       },
     ],
@@ -617,6 +786,18 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
           uri,
           mimeType: "application/json",
           text: JSON.stringify(categories, null, 2),
+        },
+      ],
+    };
+  }
+
+  if (uri === "hireflesh://guidelines") {
+    return {
+      contents: [
+        {
+          uri,
+          mimeType: "application/json",
+          text: JSON.stringify(HIREFLESH_GUIDELINES, null, 2),
         },
       ],
     };
@@ -921,8 +1102,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
+      case "get_guidelines": {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(HIREFLESH_GUIDELINES, null, 2),
+            },
+          ],
+        };
+      }
+
       default:
-        throw new Error(`Unknown tool: ${name}`);
+        throw new Error(`Unknown tool: ${name}`);}
     }
   } catch (error) {
     if (error instanceof z.ZodError) {
