@@ -1114,7 +1114,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       default:
-        throw new Error(`Unknown tool: ${name}`);}
+        throw new Error(`Unknown tool: ${name}`);
     }
   } catch (error) {
     if (error instanceof z.ZodError) {
