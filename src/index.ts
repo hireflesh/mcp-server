@@ -62,7 +62,7 @@ async function apiRequest(
     ...options,
     headers: {
       "Content-Type": "application/json",
-      "X-API-Key": API_KEY as string,
+      "Authorization": `Bearer ${API_KEY}`,
       ...options.headers,
     },
   });
